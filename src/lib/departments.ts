@@ -12,4 +12,5 @@ export const DEPARTMENTS: DepartmentSummary[] = [
   { id: 2, name: 'Sales' },
   { id: 3, name: 'Marketing' },
   { id: 4, name: 'IT' },
+  { id: 5, name: 'Research' },
 ]

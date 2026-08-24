@@ -22,6 +22,8 @@ All accounts share the password **`password123`**.
 | Viewer (reportee) | Sara Iyer | `sara.iyer@company.com` | Marketing — reports to Vikram |
 | Viewer (reportee) | Divya Pillai | `divya.pillai@company.com` | IT — reports to Amit Rao |
 | Viewer (reportee) | Rohan Gupta | `rohan.gupta@company.com` | IT — reports to Amit Rao |
+| Viewer (manager) | Farhan Ali | `farhan.ali@company.com` | Research — manages Zoya Khan |
+| Viewer (reportee) | Zoya Khan | `zoya.khan@company.com` | Research — reports to Farhan |
 
-Use Neha, Karan, Vikram, or Amit to see the **My Team** screen populated;
+Use Neha, Karan, Vikram, Farhan, or Amit to see the **My Team** screen populated;
 use any reportee to see **My Usage** with an empty team view.

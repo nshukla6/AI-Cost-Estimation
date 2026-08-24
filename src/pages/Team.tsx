@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 
 import { DataTable, type DataTableColumn } from '@/components/generic/DataTable'
+import { BarSpendChart } from '@/components/generic/charts/BarSpendChart'
 import { DownloadReportButton } from '@/components/DownloadReportButton'
 import { PeriodFilter } from '@/components/PeriodFilter'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -25,6 +26,7 @@ export function Team() {
 
   const teamUsageQuery = useQuery({ queryKey: ['allocation', 'team', { from, to }], queryFn: () => allocationApi.getTeamUsage({ from, to }) })
   const reportees = teamUsageQuery.data?.by_user ?? []
+  const reporteeBarData = reportees.map((entry) => ({ name: entry.user_name, value: entry.amount_usd }))
 
   return (
     <div className="space-y-6">
@@ -50,7 +52,8 @@ export function Team() {
         <CardHeader>
           <CardTitle>Spend by Reportee</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
+          {!teamUsageQuery.isLoading && reportees.length > 0 && <BarSpendChart data={reporteeBarData} />}
           <DataTable
             columns={columns}
             data={reportees}

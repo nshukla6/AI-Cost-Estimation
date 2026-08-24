@@ -1,59 +1,34 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { toast } from 'sonner'
+import { useQuery } from '@tanstack/react-query'
 
-import { useAuth } from '@/components/AuthContext'
 import { DataTable, type DataTableColumn } from '@/components/generic/DataTable'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { PERMISSIONS, ROLE_LABELS, type Role } from '@/config/roles.config'
+import { ROLE_LABELS } from '@/config/roles.config'
 import { usersApi } from '@/lib/api/users.api'
+import { DEPARTMENTS } from '@/lib/departments'
 import type { User } from '@/types/domain'
 
-function RoleCell({ user, canManage }: { user: User; canManage: boolean }) {
-  const queryClient = useQueryClient()
-  const mutation = useMutation({
-    mutationFn: (role: Role) => usersApi.setRole(user.id, role),
-    onSuccess: () => {
-      toast.success('User role updated successfully')
-      queryClient.invalidateQueries({ queryKey: ['users'] })
-    },
-    onError: () => toast.error('Failed to update user role'),
-  })
-
-  if (!canManage) {
-    return <Badge variant="secondary">{ROLE_LABELS[user.role]}</Badge>
-  }
-
+function RoleCell({ user, isManager }: { user: User; isManager: boolean }) {
   return (
-    <Select value={user.role} onValueChange={(value) => mutation.mutate(value as Role)} disabled={mutation.isPending}>
-      <SelectTrigger className="w-40">
-        <SelectValue />
-      </SelectTrigger>
-      <SelectContent>
-        {/* Per the API design doc, ai_tool_admin can only set a user's role to 'viewer'. */}
-        <SelectItem value="viewer">{ROLE_LABELS.viewer}</SelectItem>
-        <SelectItem value="ai_cost_manager" disabled>
-          {ROLE_LABELS.ai_cost_manager}
-        </SelectItem>
-        <SelectItem value="ai_tool_admin" disabled>
-          {ROLE_LABELS.ai_tool_admin}
-        </SelectItem>
-      </SelectContent>
-    </Select>
+    <div className="flex flex-wrap items-center gap-1.5">
+      <Badge variant="secondary">{ROLE_LABELS[user.role]}</Badge>
+      {/* "Manager" isn't a role — it's whether other users have this
+          person as their manager_id (GET /allocation/team eligibility). */}
+      {isManager && <Badge variant="outline">Manager</Badge>}
+    </div>
   )
 }
 
 export function UsersAdmin() {
-  const { hasPermission } = useAuth()
-  const canManageRoles = hasPermission(PERMISSIONS.MANAGE_USER_ROLES)
   const usersQuery = useQuery({ queryKey: ['users'], queryFn: () => usersApi.getAll() })
+
+  const managerIds = new Set((usersQuery.data ?? []).map((user) => user.manager_id).filter((id): id is number => id !== null))
 
   const columns: DataTableColumn<User>[] = [
     { key: 'name', header: 'Name', render: (row) => row.name },
     { key: 'email', header: 'Email', render: (row) => row.email },
-    { key: 'department_id', header: 'Department', render: (row) => `#${row.department_id}` },
-    { key: 'role', header: 'Role', render: (row) => <RoleCell user={row} canManage={canManageRoles} /> },
+    { key: 'department_id', header: 'Department', render: (row) => DEPARTMENTS.find((d) => d.id === row.department_id)?.name ?? `#${row.department_id}` },
+    { key: 'role', header: 'Role', render: (row) => <RoleCell user={row} isManager={managerIds.has(row.id)} /> },
   ]
 
   return (

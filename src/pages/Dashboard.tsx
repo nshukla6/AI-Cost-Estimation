@@ -1,15 +1,19 @@
 import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQueries, useQuery } from '@tanstack/react-query'
 import { Building2, DollarSign, KeySquare } from 'lucide-react'
 
 import { DataTable, type DataTableColumn } from '@/components/generic/DataTable'
+import { BarSpendChart } from '@/components/generic/charts/BarSpendChart'
+import { LineTrendChart } from '@/components/generic/charts/LineTrendChart'
+import { PieSpendChart } from '@/components/generic/charts/PieSpendChart'
 import { DownloadReportButton } from '@/components/DownloadReportButton'
 import { PeriodFilter } from '@/components/PeriodFilter'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { allocationApi } from '@/lib/api/allocation.api'
+import { getVendorColor } from '@/lib/chartColors'
 import { DEPARTMENTS } from '@/lib/departments'
 import { formatUsd } from '@/lib/format'
-import { periodRange, type PeriodGranularity } from '@/lib/period'
+import { lastNMonths, periodRange, type PeriodGranularity } from '@/lib/period'
 import { usersApi } from '@/lib/api/users.api'
 import { vendorsApi } from '@/lib/api/vendors.api'
 import type { OrgUsageBreakdownEntry } from '@/types/domain'
@@ -20,20 +24,37 @@ const columns: DataTableColumn<OrgUsageBreakdownEntry>[] = [
   { key: 'top_tool', header: 'Top Tool', render: (row) => row.top_vendor ?? <span className="text-muted-foreground">—</span> },
 ]
 
+const trendMonths = lastNMonths(6)
+
 export function Dashboard() {
   const [granularity, setGranularity] = useState<PeriodGranularity>('month')
   const { from, to, label } = periodRange(granularity)
 
-  const orgUsageQuery = useQuery({
+  const orgByDepartmentQuery = useQuery({
     queryKey: ['allocation', 'org', { groupBy: 'department', from, to }],
     queryFn: () => allocationApi.getOrgUsage({ groupBy: 'department', from, to }),
+  })
+  const orgByVendorQuery = useQuery({
+    queryKey: ['allocation', 'org', { groupBy: 'vendor', from, to }],
+    queryFn: () => allocationApi.getOrgUsage({ groupBy: 'vendor', from, to }),
+  })
+  const trendQueries = useQueries({
+    queries: trendMonths.map((month) => ({
+      queryKey: ['allocation', 'org', 'trend', month.from],
+      queryFn: () => allocationApi.getOrgUsage({ from: month.from, to: month.to, groupBy: 'vendor' as const }),
+    })),
   })
   const usersQuery = useQuery({ queryKey: ['users'], queryFn: () => usersApi.getAll() })
   const vendorsQuery = useQuery({ queryKey: ['vendors'], queryFn: () => vendorsApi.getAll() })
 
-  const totalSpend = orgUsageQuery.data?.total_usd ?? 0
+  const totalSpend = orgByDepartmentQuery.data?.total_usd ?? 0
   const activeLicenses = usersQuery.data?.length ?? 0
   const activeVendors = vendorsQuery.data?.filter((vendor) => vendor.is_active).length ?? 0
+
+  const departmentBarData = (orgByDepartmentQuery.data?.breakdown ?? []).map((entry) => ({ name: entry.key, value: entry.amount_usd }))
+  const vendorPieData = (orgByVendorQuery.data?.breakdown ?? []).map((entry) => ({ name: entry.key, value: entry.amount_usd, color: getVendorColor(entry.key) }))
+  const trendData = trendMonths.map((month, index) => ({ name: month.shortLabel, value: trendQueries[index].data?.total_usd ?? 0 }))
+  const trendLoading = trendQueries.some((query) => query.isLoading)
 
   return (
     <div className="space-y-6">
@@ -76,10 +97,38 @@ export function Dashboard() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Spend by Department</CardTitle>
+          <CardTitle>Total Spend Trend</CardTitle>
         </CardHeader>
         <CardContent>
-          <DataTable columns={columns} data={orgUsageQuery.data?.breakdown ?? []} rowKey={(row) => row.key} isLoading={orgUsageQuery.isLoading} />
+          {trendLoading ? <div className="h-[240px] animate-pulse rounded-md bg-muted" /> : <LineTrendChart data={trendData} />}
+        </CardContent>
+      </Card>
+
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle>Spend by Department</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {orgByDepartmentQuery.isLoading ? <div className="h-[240px] animate-pulse rounded-md bg-muted" /> : <BarSpendChart data={departmentBarData} />}
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle>Spend by AI Tool</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {orgByVendorQuery.isLoading ? <div className="h-[240px] animate-pulse rounded-md bg-muted" /> : <PieSpendChart data={vendorPieData} />}
+          </CardContent>
+        </Card>
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Spend by Department (table)</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <DataTable columns={columns} data={orgByDepartmentQuery.data?.breakdown ?? []} rowKey={(row) => row.key} isLoading={orgByDepartmentQuery.isLoading} />
         </CardContent>
       </Card>
     </div>

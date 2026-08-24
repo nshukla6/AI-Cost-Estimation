@@ -45,3 +45,20 @@ export const PERIOD_OPTIONS: { value: PeriodGranularity; label: string }[] = [
   { value: 'quarter', label: 'This Quarter' },
   { value: 'year', label: 'This Year' },
 ]
+
+export interface MonthBucket {
+  from: string
+  to: string
+  shortLabel: string
+}
+
+/** Oldest-to-newest single-month buckets, for trend line charts. */
+export function lastNMonths(n: number, reference: Date = new Date()): MonthBucket[] {
+  const buckets: MonthBucket[] = []
+  for (let i = n - 1; i >= 0; i--) {
+    const date = new Date(reference.getFullYear(), reference.getMonth() - i, 1)
+    const from = monthStart(date.getFullYear(), date.getMonth())
+    buckets.push({ from, to: from, shortLabel: `${MONTH_NAMES[date.getMonth()].slice(0, 3)} ${String(date.getFullYear()).slice(2)}` })
+  }
+  return buckets
+}

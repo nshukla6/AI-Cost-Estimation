@@ -3,10 +3,13 @@ import { useQuery } from '@tanstack/react-query'
 import { useParams } from 'react-router-dom'
 
 import { DataTable, type DataTableColumn } from '@/components/generic/DataTable'
+import { BarSpendChart } from '@/components/generic/charts/BarSpendChart'
+import { PieSpendChart } from '@/components/generic/charts/PieSpendChart'
 import { DownloadReportButton } from '@/components/DownloadReportButton'
 import { PeriodFilter } from '@/components/PeriodFilter'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { allocationApi } from '@/lib/api/allocation.api'
+import { getVendorColor } from '@/lib/chartColors'
 import { DEPARTMENTS } from '@/lib/departments'
 import { formatUsd } from '@/lib/format'
 import { periodRange, type PeriodGranularity } from '@/lib/period'
@@ -35,6 +38,9 @@ export function DepartmentDetail() {
     queryFn: () => allocationApi.getDepartmentUsage(id, { from, to }),
   })
 
+  const userBarData = (departmentQuery.data?.by_user ?? []).map((entry) => ({ name: entry.user_name, value: entry.amount_usd }))
+  const vendorPieData = (departmentQuery.data?.by_vendor ?? []).map((entry) => ({ name: entry.key, value: entry.amount_usd, color: getVendorColor(entry.key) }))
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -53,7 +59,8 @@ export function DepartmentDetail() {
           <CardHeader>
             <CardTitle>Spend by User</CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-4">
+            {departmentQuery.isLoading ? <div className="h-[240px] animate-pulse rounded-md bg-muted" /> : <BarSpendChart data={userBarData} />}
             <DataTable
               columns={userColumns}
               data={departmentQuery.data?.by_user ?? []}
@@ -69,6 +76,7 @@ export function DepartmentDetail() {
           </CardHeader>
           <CardContent className="space-y-4">
             <p className="text-sm font-medium">Total: {departmentQuery.data ? formatUsd(departmentQuery.data.total_usd) : '—'}</p>
+            {departmentQuery.isLoading ? <div className="h-[240px] animate-pulse rounded-md bg-muted" /> : <PieSpendChart data={vendorPieData} />}
             <DataTable
               columns={vendorColumns}
               data={departmentQuery.data?.by_vendor ?? []}

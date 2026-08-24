@@ -9,7 +9,7 @@ files don't know the difference — they call `apiRequest()` and hit
 ## How it's wired
 
 - `src/mocks/db.ts` — the seed data (departments, vendors, users, cost
-  uploads/records) and `localStorage` read/write (key `aice.mockdb.v2`).
+  uploads/records) and `localStorage` read/write (key `aice.mockdb.v3`).
 - `src/mocks/handlers.ts` — one MSW handler per endpoint in
   `docs/AI_Cost_Tracking_API_Design.docx`, enforcing the same roles,
   status codes, and error shapes the real API is documented to use.
@@ -46,7 +46,7 @@ The mock only seeds once, then persists to `localStorage`. To start over,
 run this in the browser console and reload:
 
 ```js
-localStorage.removeItem('aice.mockdb.v2')
+localStorage.removeItem('aice.mockdb.v3')
 ```
 
 (This is separate from the logged-in session, `localStorage` keys

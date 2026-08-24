@@ -65,7 +65,7 @@ export interface MockDb {
   }
 }
 
-const STORAGE_KEY = 'aice.mockdb.v2'
+const STORAGE_KEY = 'aice.mockdb.v3'
 const DEMO_PASSWORD = 'password123'
 
 const DEPARTMENTS: MockDepartment[] = [
@@ -73,6 +73,7 @@ const DEPARTMENTS: MockDepartment[] = [
   { id: 2, name: 'Sales' },
   { id: 3, name: 'Marketing' },
   { id: 4, name: 'IT' },
+  { id: 5, name: 'Research' },
 ]
 
 const VENDORS: MockVendor[] = [
@@ -98,6 +99,8 @@ const USERS: MockUser[] = [
   { id: 10, name: 'Sara Iyer', email: 'sara.iyer@company.com', password: DEMO_PASSWORD, role: 'viewer', department_id: 3, manager_id: 9 },
   { id: 11, name: 'Divya Pillai', email: 'divya.pillai@company.com', password: DEMO_PASSWORD, role: 'viewer', department_id: 4, manager_id: 2 },
   { id: 12, name: 'Rohan Gupta', email: 'rohan.gupta@company.com', password: DEMO_PASSWORD, role: 'viewer', department_id: 4, manager_id: 2 },
+  { id: 13, name: 'Farhan Ali', email: 'farhan.ali@company.com', password: DEMO_PASSWORD, role: 'viewer', department_id: 5, manager_id: null },
+  { id: 14, name: 'Zoya Khan', email: 'zoya.khan@company.com', password: DEMO_PASSWORD, role: 'viewer', department_id: 5, manager_id: 13 },
 ]
 
 const COST_MONTHS = ['2026-06-01', '2026-07-01', '2026-08-01']

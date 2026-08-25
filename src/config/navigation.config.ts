@@ -1,6 +1,7 @@
 import {
   Building2,
   LayoutDashboard,
+  Package,
   Upload,
   UserRound,
   Users,
@@ -45,8 +46,14 @@ export const navigationConfig: NavItem[] = [
     permission: PERMISSIONS.VIEW_OWN_USAGE,
   },
   {
-    label: 'Vendors & Uploads',
+    label: 'Vendors',
     path: '/admin/vendors',
+    icon: Package,
+    permission: PERMISSIONS.MANAGE_VENDORS,
+  },
+  {
+    label: 'Uploads',
+    path: '/admin/uploads',
     icon: Upload,
     permission: PERMISSIONS.UPLOAD_COST_SHEET,
   },

@@ -15,6 +15,7 @@ import { MyUsage } from '@/pages/MyUsage'
 import { NotFound } from '@/pages/NotFound'
 import { Team } from '@/pages/Team'
 import { Unauthorized } from '@/pages/Unauthorized'
+import { UploadsAdmin } from '@/pages/admin/Uploads'
 import { UsersAdmin } from '@/pages/admin/Users'
 import { VendorsAdmin } from '@/pages/admin/Vendors'
 
@@ -50,8 +51,12 @@ function App() {
                   <Route path="/my-usage" element={<MyUsage />} />
                 </Route>
 
-                <Route element={<ProtectedRoute permission={PERMISSIONS.UPLOAD_COST_SHEET} />}>
+                <Route element={<ProtectedRoute permission={PERMISSIONS.MANAGE_VENDORS} />}>
                   <Route path="/admin/vendors" element={<VendorsAdmin />} />
+                </Route>
+
+                <Route element={<ProtectedRoute permission={PERMISSIONS.UPLOAD_COST_SHEET} />}>
+                  <Route path="/admin/uploads" element={<UploadsAdmin />} />
                 </Route>
 
                 <Route element={<ProtectedRoute permission={PERMISSIONS.VIEW_USERS} />}>

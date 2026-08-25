@@ -1,10 +1,9 @@
 import { useState } from 'react'
-import { useQueries, useQuery } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import { Building2, DollarSign, KeySquare } from 'lucide-react'
 
 import { DataTable, type DataTableColumn } from '@/components/generic/DataTable'
 import { BarSpendChart } from '@/components/generic/charts/BarSpendChart'
-import { LineTrendChart } from '@/components/generic/charts/LineTrendChart'
 import { PieSpendChart } from '@/components/generic/charts/PieSpendChart'
 import { DownloadReportButton } from '@/components/DownloadReportButton'
 import { PeriodFilter } from '@/components/PeriodFilter'
@@ -13,7 +12,7 @@ import { allocationApi } from '@/lib/api/allocation.api'
 import { getVendorColor } from '@/lib/chartColors'
 import { DEPARTMENTS } from '@/lib/departments'
 import { formatUsd } from '@/lib/format'
-import { lastNMonths, periodRange, type PeriodGranularity } from '@/lib/period'
+import { periodRange, type PeriodGranularity } from '@/lib/period'
 import { usersApi } from '@/lib/api/users.api'
 import { vendorsApi } from '@/lib/api/vendors.api'
 import type { OrgUsageBreakdownEntry } from '@/types/domain'
@@ -23,8 +22,6 @@ const columns: DataTableColumn<OrgUsageBreakdownEntry>[] = [
   { key: 'amount_usd', header: 'Spend', align: 'right', render: (row) => formatUsd(row.amount_usd) },
   { key: 'top_tool', header: 'Top Tool', render: (row) => row.top_vendor ?? <span className="text-muted-foreground">—</span> },
 ]
-
-const trendMonths = lastNMonths(6)
 
 export function Dashboard() {
   const [granularity, setGranularity] = useState<PeriodGranularity>('month')
@@ -38,12 +35,6 @@ export function Dashboard() {
     queryKey: ['allocation', 'org', { groupBy: 'vendor', from, to }],
     queryFn: () => allocationApi.getOrgUsage({ groupBy: 'vendor', from, to }),
   })
-  const trendQueries = useQueries({
-    queries: trendMonths.map((month) => ({
-      queryKey: ['allocation', 'org', 'trend', month.from],
-      queryFn: () => allocationApi.getOrgUsage({ from: month.from, to: month.to, groupBy: 'vendor' as const }),
-    })),
-  })
   const usersQuery = useQuery({ queryKey: ['users'], queryFn: () => usersApi.getAll() })
   const vendorsQuery = useQuery({ queryKey: ['vendors'], queryFn: () => vendorsApi.getAll() })
 
@@ -53,8 +44,6 @@ export function Dashboard() {
 
   const departmentBarData = (orgByDepartmentQuery.data?.breakdown ?? []).map((entry) => ({ name: entry.key, value: entry.amount_usd }))
   const vendorPieData = (orgByVendorQuery.data?.breakdown ?? []).map((entry) => ({ name: entry.key, value: entry.amount_usd, color: getVendorColor(entry.key) }))
-  const trendData = trendMonths.map((month, index) => ({ name: month.shortLabel, value: trendQueries[index].data?.total_usd ?? 0 }))
-  const trendLoading = trendQueries.some((query) => query.isLoading)
 
   return (
     <div className="space-y-6">
@@ -94,15 +83,6 @@ export function Dashboard() {
           <CardContent className="text-2xl font-semibold">{DEPARTMENTS.length}</CardContent>
         </Card>
       </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Total Spend Trend</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {trendLoading ? <div className="h-[240px] animate-pulse rounded-md bg-muted" /> : <LineTrendChart data={trendData} />}
-        </CardContent>
-      </Card>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card>

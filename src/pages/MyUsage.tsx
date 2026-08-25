@@ -1,15 +1,14 @@
 import { useState } from 'react'
-import { useQueries, useQuery } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 
 import { useAuth } from '@/components/AuthContext'
 import { DataTable, type DataTableColumn } from '@/components/generic/DataTable'
-import { LineTrendChart } from '@/components/generic/charts/LineTrendChart'
 import { DownloadReportButton } from '@/components/DownloadReportButton'
 import { PeriodFilter } from '@/components/PeriodFilter'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { allocationApi } from '@/lib/api/allocation.api'
 import { formatUsd } from '@/lib/format'
-import { lastNMonths, periodRange, type PeriodGranularity } from '@/lib/period'
+import { periodRange, type PeriodGranularity } from '@/lib/period'
 import type { MyUsageBreakdownEntry } from '@/types/domain'
 
 const columns: DataTableColumn<MyUsageBreakdownEntry>[] = [
@@ -18,22 +17,12 @@ const columns: DataTableColumn<MyUsageBreakdownEntry>[] = [
   { key: 'amount_usd', header: 'Spend', align: 'right', render: (row) => formatUsd(row.amount_usd) },
 ]
 
-const trendMonths = lastNMonths(6)
-
 export function MyUsage() {
   const { currentUser } = useAuth()
   const [granularity, setGranularity] = useState<PeriodGranularity>('month')
   const { from, to, label } = periodRange(granularity)
 
   const myUsageQuery = useQuery({ queryKey: ['allocation', 'my-usage', { from, to }], queryFn: () => allocationApi.getMyUsage({ from, to }) })
-  const trendQueries = useQueries({
-    queries: trendMonths.map((month) => ({
-      queryKey: ['allocation', 'my-usage', 'trend', month.from],
-      queryFn: () => allocationApi.getMyUsage({ from: month.from, to: month.to }),
-    })),
-  })
-  const trendData = trendMonths.map((month, index) => ({ name: month.shortLabel, value: trendQueries[index].data?.total_usd ?? 0 }))
-  const trendLoading = trendQueries.some((query) => query.isLoading)
 
   return (
     <div className="space-y-6">
@@ -55,15 +44,6 @@ export function MyUsage() {
           <CardTitle className="text-sm font-medium text-muted-foreground">Total Spend</CardTitle>
         </CardHeader>
         <CardContent className="text-2xl font-semibold">{myUsageQuery.data ? formatUsd(myUsageQuery.data.total_usd) : '—'}</CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Spend Trend</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {trendLoading ? <div className="h-[240px] animate-pulse rounded-md bg-muted" /> : <LineTrendChart data={trendData} />}
-        </CardContent>
       </Card>
 
       <Card>

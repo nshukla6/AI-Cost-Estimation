@@ -3,6 +3,7 @@ import type { ReactNode } from 'react'
 
 import { appConfig } from '@/config/app.config'
 import { roleHasPermission, type Permission } from '@/config/roles.config'
+import { allocationApi } from '@/lib/api/allocation.api'
 import { authApi } from '@/lib/api/auth.api'
 import type { AuthUser } from '@/types/domain'
 
@@ -45,6 +46,27 @@ function clearSession(): void {
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(() => readStoredUser())
   const [isLoading, setIsLoading] = useState(false)
+  const [managesReports, setManagesReports] = useState(false)
+
+  // GET /allocation/team is available to any authenticated user regardless
+  // of role (unlike GET /users, which 403s for viewers) and reports back
+  // that user's own direct reports — the only role-independent way to know
+  // whether this account manages anyone, used to hide "My Team" for ICs.
+  useEffect(() => {
+    if (!currentUser) return
+    let cancelled = false
+    allocationApi
+      .getTeamUsage()
+      .then((usage) => {
+        if (!cancelled) setManagesReports(usage.by_user.length > 0)
+      })
+      .catch(() => {
+        if (!cancelled) setManagesReports(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [currentUser])
 
   // SSO callback: the identity provider redirects back with ?token=&user=
   // (backend-issued JWT + serialized user). Adjust once the real SAML
@@ -86,6 +108,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = useCallback(() => {
     clearSession()
     setCurrentUser(null)
+    setManagesReports(false)
   }, [])
 
   const hasPermission = useCallback(
@@ -104,11 +127,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       loginWithSso,
       logout,
       hasPermission,
-      // manager_id relationships live server-side; until /users is queried
-      // this is a placeholder any role/manager screen can refine.
-      managesReports: currentUser !== null,
+      managesReports,
     }),
-    [currentUser, isLoading, loginWithPassword, loginWithSso, logout, hasPermission],
+    [currentUser, isLoading, loginWithPassword, loginWithSso, logout, hasPermission, managesReports],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

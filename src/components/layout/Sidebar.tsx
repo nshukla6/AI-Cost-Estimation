@@ -6,9 +6,9 @@ import { navigationConfig } from '@/config/navigation.config'
 import { cn } from '@/lib/utils'
 
 export function Sidebar() {
-  const { hasPermission } = useAuth()
+  const { hasPermission, managesReports } = useAuth()
   const location = useLocation()
-  const items = navigationConfig.filter((item) => hasPermission(item.permission))
+  const items = navigationConfig.filter((item) => hasPermission(item.permission) && (!item.requiresManager || managesReports))
 
   return (
     <aside className="flex w-60 shrink-0 flex-col border-r border-border bg-background">

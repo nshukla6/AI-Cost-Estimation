@@ -1,5 +1,6 @@
 import {
   Building2,
+  FileText,
   LayoutDashboard,
   Package,
   Upload,
@@ -17,6 +18,8 @@ export interface NavItem {
   icon: LucideIcon
   permission: Permission
   children?: { label: string; path: string }[]
+  /** Hide this item unless the logged-in user has direct reports. */
+  requiresManager?: boolean
 }
 
 export const navigationConfig: NavItem[] = [
@@ -38,12 +41,19 @@ export const navigationConfig: NavItem[] = [
     path: '/team',
     icon: Users,
     permission: PERMISSIONS.VIEW_TEAM_USAGE,
+    requiresManager: true,
   },
   {
     label: 'My Usage',
     path: '/my-usage',
     icon: UserRound,
     permission: PERMISSIONS.VIEW_OWN_USAGE,
+  },
+  {
+    label: 'Reports',
+    path: '/reports',
+    icon: FileText,
+    permission: PERMISSIONS.DOWNLOAD_REPORTS,
   },
   {
     label: 'Vendors',

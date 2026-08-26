@@ -75,7 +75,7 @@ export interface DepartmentUsage {
   by_vendor: OrgUsageBreakdownEntry[]
 }
 
-export type OrgUsageGroupBy = 'department' | 'vendor' | 'user'
+export type OrgUsageGroupBy = 'department' | 'vendor' | 'user' | 'org'
 
 export interface OrgUsageBreakdownEntry {
   key: string

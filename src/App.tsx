@@ -13,6 +13,7 @@ import { Home } from '@/pages/Home'
 import { Login } from '@/pages/Login'
 import { MyUsage } from '@/pages/MyUsage'
 import { NotFound } from '@/pages/NotFound'
+import { Reports } from '@/pages/Reports'
 import { Team } from '@/pages/Team'
 import { Unauthorized } from '@/pages/Unauthorized'
 import { UploadsAdmin } from '@/pages/admin/Uploads'
@@ -49,6 +50,10 @@ function App() {
 
                 <Route element={<ProtectedRoute permission={PERMISSIONS.VIEW_OWN_USAGE} />}>
                   <Route path="/my-usage" element={<MyUsage />} />
+                </Route>
+
+                <Route element={<ProtectedRoute permission={PERMISSIONS.DOWNLOAD_REPORTS} />}>
+                  <Route path="/reports" element={<Reports />} />
                 </Route>
 
                 <Route element={<ProtectedRoute permission={PERMISSIONS.MANAGE_VENDORS} />}>

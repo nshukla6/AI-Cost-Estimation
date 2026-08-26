@@ -117,6 +117,8 @@ export function computeOrgUsage(db: MockDb, filter: RangeFilter & { groupBy: Org
       key = db.vendors.find((vendor) => vendor.id === record.vendor_id)?.name ?? `Vendor #${record.vendor_id}`
     } else if (filter.groupBy === 'user') {
       key = db.users.find((user) => user.id === record.user_id)?.name ?? `User #${record.user_id}`
+    } else if (filter.groupBy === 'org') {
+      key = 'Organization'
     } else {
       const user = db.users.find((u) => u.id === record.user_id)
       const department = user ? db.departments.find((d) => d.id === user.department_id) : undefined
@@ -146,9 +148,16 @@ export function computeOrgUsage(db: MockDb, filter: RangeFilter & { groupBy: Org
   }
 }
 
+const CSV_HEADER_LABEL: Record<OrgUsageGroupBy, string> = {
+  department: 'department',
+  vendor: 'vendor',
+  user: 'user',
+  org: 'organization',
+}
+
 export function generateOrgReportCsv(db: MockDb, filter: RangeFilter & { groupBy: OrgUsageGroupBy }): string {
   const usage = computeOrgUsage(db, filter)
-  const header = `${filter.groupBy},amount_usd\n`
+  const header = `${CSV_HEADER_LABEL[filter.groupBy]},amount_usd\n`
   const rows = usage.breakdown.map((entry) => `${entry.key},${entry.amount_usd.toFixed(2)}`).join('\n')
   return header + rows + '\n'
 }

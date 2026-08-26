@@ -68,7 +68,7 @@ export function Dashboard() {
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Active Licenses</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">Active</CardTitle>
             <KeySquare className="size-4 text-muted-foreground" />
           </CardHeader>
           <CardContent className="text-2xl font-semibold">

@@ -41,18 +41,34 @@ export function UploadsAdmin() {
   const [vendorId, setVendorId] = useState('')
   const [costMonth, setCostMonth] = useState('')
   const [file, setFile] = useState<File | null>(null)
+  // Only shown after the API rejects with 409 REASON_REQUIRED — this vendor/
+  // month already has an upload, so a reason is needed before it re-submits
+  // as the next version.
+  const [needsReason, setNeedsReason] = useState(false)
+  const [reason, setReason] = useState('')
+
+  const resetUploadForm = () => {
+    setIsUploadOpen(false)
+    setVendorId('')
+    setCostMonth('')
+    setFile(null)
+    setNeedsReason(false)
+    setReason('')
+  }
 
   const uploadMutation = useMutation({
-    mutationFn: () => costUploadsApi.upload({ vendorId: Number(vendorId), costMonth, file: file! }),
+    mutationFn: () => costUploadsApi.upload({ vendorId: Number(vendorId), costMonth, file: file!, reason: needsReason ? reason : undefined }),
     onSuccess: () => {
       toast.success('Cost sheet uploaded successfully')
       queryClient.invalidateQueries({ queryKey: ['cost-uploads'] })
-      setIsUploadOpen(false)
-      setVendorId('')
-      setCostMonth('')
-      setFile(null)
+      resetUploadForm()
     },
     onError: (error) => {
+      if (error instanceof ApiError && error.code === 'REASON_REQUIRED') {
+        setNeedsReason(true)
+        toast.error('This vendor/month already has an upload — provide a reason to replace it.')
+        return
+      }
       toast.error(error instanceof ApiError ? error.message : 'Failed to upload cost sheet')
     },
   })
@@ -60,6 +76,10 @@ export function UploadsAdmin() {
   const handleUploadSubmit = () => {
     if (!vendorId || !costMonth || !file) {
       toast.error('Please fill in all mandatory fields')
+      return
+    }
+    if (needsReason && !reason.trim()) {
+      toast.error('A reason is required to replace the existing upload')
       return
     }
     uploadMutation.mutate()
@@ -94,17 +114,24 @@ export function UploadsAdmin() {
 
       <SideSheet
         open={isUploadOpen}
-        onOpenChange={setIsUploadOpen}
+        onOpenChange={(open) => (open ? setIsUploadOpen(true) : resetUploadForm())}
         title="Upload Cost Sheet"
         description="Upload a vendor's monthly cost sheet in CSV format."
         onSubmit={handleUploadSubmit}
-        submitLabel="Upload"
+        submitLabel={needsReason ? 'Replace Upload' : 'Upload'}
         submittingLabel="Uploading..."
         isSubmitting={uploadMutation.isPending}
-        submitDisabled={!vendorId || !costMonth || !file}
+        submitDisabled={!vendorId || !costMonth || !file || (needsReason && !reason.trim())}
       >
         <FormField label="Vendor" required>
-          <Select value={vendorId} onValueChange={setVendorId}>
+          <Select
+            value={vendorId}
+            onValueChange={(value) => {
+              setVendorId(value)
+              setNeedsReason(false)
+              setReason('')
+            }}
+          >
             <SelectTrigger className="w-full">
               <SelectValue placeholder="Select a vendor" />
             </SelectTrigger>
@@ -119,13 +146,33 @@ export function UploadsAdmin() {
         </FormField>
 
         <FormField label="Cost Month" required>
-          <Input type="date" value={costMonth} onChange={(e) => setCostMonth(e.target.value)} />
+          {/* type="month" only lets a month/year be picked (no day) — cost_month
+              is always stored as the 1st of the month everywhere downstream
+              (allocation queries compare cost_month lexically as a range). */}
+          <Input
+            type="month"
+            value={costMonth.slice(0, 7)}
+            onChange={(e) => {
+              setCostMonth(e.target.value ? `${e.target.value}-01` : '')
+              setNeedsReason(false)
+              setReason('')
+            }}
+          />
         </FormField>
 
         <FormField label="CSV File" required>
           <Input type="file" accept=".csv" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
           <p className="text-xs text-muted-foreground">Expected columns: email,amount</p>
         </FormField>
+
+        {needsReason && (
+          <FormField label="Reason for replacing this upload" required>
+            <Input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g. Vendor sent a corrected invoice" />
+            <p className="text-xs text-muted-foreground">
+              A cost sheet already exists for this vendor and month — submitting again will replace it as the next version.
+            </p>
+          </FormField>
+        )}
       </SideSheet>
     </div>
   )

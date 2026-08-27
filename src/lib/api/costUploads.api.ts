@@ -6,6 +6,8 @@ export interface UploadCostSheetParams {
   costMonth: string
   file: File
   force?: boolean
+  /** Required by the API (409 REASON_REQUIRED) when re-uploading a vendor/month that already has data. */
+  reason?: string
 }
 
 export interface UploadHistoryFilters {
@@ -21,12 +23,13 @@ export interface UploadDiffEntry {
 }
 
 export const costUploadsApi = {
-  upload: ({ vendorId, costMonth, file, force }: UploadCostSheetParams) => {
+  upload: ({ vendorId, costMonth, file, force, reason }: UploadCostSheetParams) => {
     const formData = new FormData()
     formData.append('vendor_id', String(vendorId))
     formData.append('cost_month', costMonth)
     formData.append('file', file)
     if (force) formData.append('force', 'true')
+    if (reason) formData.append('reason', reason)
 
     return apiRequest<CostUpload>('/cost-uploads', {
       method: 'POST',

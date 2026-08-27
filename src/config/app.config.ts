@@ -2,7 +2,10 @@ export const appConfig = {
   appName: 'AI Cost Estimation App',
   appShortName: 'AI Cost Estimation',
 
-  apiBaseUrl: import.meta.env.VITE_API_BASE_URL ?? '/api/v1',
+  // `||`, not `??` — a VITE_API_BASE_URL set to an empty string (not just
+  // unset) must also fall back to the default, or every request silently
+  // loses the /api/v1 prefix and hits the frontend's own domain instead.
+  apiBaseUrl: import.meta.env.VITE_API_BASE_URL || '/api/v1',
 
   branding: {
     logoInitial: 'A',

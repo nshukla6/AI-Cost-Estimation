@@ -6,8 +6,8 @@ export const allocationApi = {
 
   getTeamUsage: ({ from, to }: DateRangeParams = {}) => apiRequest<TeamUsage>(`/allocation/team${buildQueryString({ from, to })}`),
 
-  getDepartmentUsage: (departmentId: number, { from, to }: DateRangeParams = {}) =>
-    apiRequest<DepartmentUsage>(`/allocation/department/${departmentId}${buildQueryString({ from, to })}`),
+  getDepartmentUsage: (departmentId: string, { from, to }: DateRangeParams = {}) =>
+    apiRequest<DepartmentUsage>(`/allocation/department/${encodeURIComponent(departmentId)}${buildQueryString({ from, to })}`),
 
   getOrgUsage: ({ from, to, groupBy }: DateRangeParams & { groupBy?: OrgUsageGroupBy } = {}) =>
     apiRequest<OrgUsage>(`/allocation/org${buildQueryString({ from, to, group_by: groupBy })}`),

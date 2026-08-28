@@ -3,19 +3,33 @@ import type { Role } from '@/config/roles.config'
 import type { User } from '@/types/domain'
 
 export interface UserFilters {
-  departmentId?: number
+  departmentId?: string
   role?: Role
-  managerId?: number
+  managerEmail?: string
+}
+
+export interface RoleOption {
+  role_code: string
+  role_name: string
+  description: string | null
 }
 
 export const usersApi = {
-  getAll: ({ departmentId, role, managerId }: UserFilters = {}) =>
-    apiRequest<User[]>(`/users${buildQueryString({ department_id: departmentId, role, manager_id: managerId })}`),
+  getAll: ({ departmentId, role, managerEmail }: UserFilters = {}) =>
+    apiRequest<User[]>(`/users${buildQueryString({ department_id: departmentId, role, manager_email: managerEmail })}`),
 
-  // ai_tool_admin only, and only settable to 'viewer' per the API design doc.
-  setRole: (id: number, role: Role) =>
-    apiRequest<User>(`/users/${id}/role`, {
-      method: 'PUT',
-      body: { role },
+  // The picker for assignRole — every role that exists, not just ones already in use.
+  getRoles: () => apiRequest<RoleOption[]>('/roles'),
+
+  // users.manage_roles only.
+  assignRole: (email: string, roleCode: string) =>
+    apiRequest<{ email: string; roles: string[] }>(`/users/${encodeURIComponent(email)}/roles`, {
+      method: 'POST',
+      body: { role_code: roleCode },
+    }),
+
+  removeRole: (email: string, roleCode: string) =>
+    apiRequest<{ email: string; roles: string[] }>(`/users/${encodeURIComponent(email)}/roles/${encodeURIComponent(roleCode)}`, {
+      method: 'DELETE',
     }),
 }

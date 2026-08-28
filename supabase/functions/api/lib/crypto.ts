@@ -56,8 +56,11 @@ export async function verifyPassword(password: string, stored: string): Promise<
 }
 
 interface TokenPayload {
-  sub: number
-  role: string
+  // Email — users are natural-keyed now, there's no numeric id. Roles
+  // aren't embedded here: they're resolved fresh from user_roles on every
+  // request (see lib/access.ts) so a role change takes effect immediately
+  // instead of waiting for the next login.
+  sub: string
   iat: number
   exp: number
 }
@@ -68,10 +71,9 @@ async function hmacKey(secret: string): Promise<CryptoKey> {
   return crypto.subtle.importKey('raw', new TextEncoder().encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign', 'verify'])
 }
 
-export async function createToken(user: { id: number; role: string }, secret: string): Promise<string> {
+export async function createToken(user: { email: string }, secret: string): Promise<string> {
   const payload: TokenPayload = {
-    sub: user.id,
-    role: user.role,
+    sub: user.email,
     iat: Math.floor(Date.now() / 1000),
     exp: Math.floor(Date.now() / 1000) + TOKEN_TTL_SECONDS,
   }

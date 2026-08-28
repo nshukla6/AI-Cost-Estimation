@@ -1,6 +1,11 @@
 /**
- * Roles come from the `role` claim in the auth JWT (see
- * docs/AI_Cost_Tracking_API_Design.docx, section 3).
+ * Roles come from the backend now (roles / permissions / role_permissions
+ * tables), resolved server-side and returned on login as
+ * `user.roles`/`user.permissions` — this file no longer hardcodes which
+ * permissions a role has. `PERMISSIONS` stays as typo-safe constants (the
+ * values must match `permissions.permission_code` in the database); `Role`
+ * and `ROLE_LABELS` stay as display/typing sugar for the fixed 3 roles that
+ * exist today.
  */
 export type Role = 'viewer' | 'ai_cost_manager' | 'ai_tool_admin'
 
@@ -24,37 +29,3 @@ export const PERMISSIONS = {
 } as const
 
 export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS]
-
-/**
- * Team usage (GET /reports/team) is not role-gated on the backend — any
- * user with direct reports can see it. It is included for every role here;
- * screens should additionally check `currentUser.managesReports`.
- */
-export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
-  viewer: [PERMISSIONS.VIEW_OWN_USAGE, PERMISSIONS.VIEW_TEAM_USAGE],
-  ai_cost_manager: [
-    PERMISSIONS.VIEW_OWN_USAGE,
-    PERMISSIONS.VIEW_TEAM_USAGE,
-    PERMISSIONS.VIEW_DEPARTMENT_USAGE,
-    PERMISSIONS.VIEW_ORG_USAGE,
-    PERMISSIONS.DOWNLOAD_REPORTS,
-    PERMISSIONS.VIEW_UPLOAD_HISTORY,
-    PERMISSIONS.VIEW_USERS,
-  ],
-  // "Can see all the screens but can not download the reports."
-  ai_tool_admin: [
-    PERMISSIONS.VIEW_OWN_USAGE,
-    PERMISSIONS.VIEW_TEAM_USAGE,
-    PERMISSIONS.VIEW_DEPARTMENT_USAGE,
-    PERMISSIONS.VIEW_ORG_USAGE,
-    PERMISSIONS.UPLOAD_COST_SHEET,
-    PERMISSIONS.MANAGE_VENDORS,
-    PERMISSIONS.VIEW_UPLOAD_HISTORY,
-    PERMISSIONS.VIEW_USERS,
-    PERMISSIONS.MANAGE_USER_ROLES,
-  ],
-}
-
-export function roleHasPermission(role: Role, permission: Permission): boolean {
-  return ROLE_PERMISSIONS[role].includes(permission)
-}

@@ -1,43 +1,44 @@
 import type { Role } from '@/config/roles.config'
 
 export interface AuthUser {
-  id: number
-  name: string
-  role: Role
-  department_id: number
-  manager_id: number | null
+  email: string
+  name: string | null
+  department_id: string | null
+  manager_email: string | null
+  roles: Role[]
+  permissions: string[]
 }
 
 export interface Department {
-  id: number
+  id: string
   name: string
 }
 
 export interface Vendor {
-  id: number
+  code: string
   name: string
   is_active: boolean
 }
 
 export interface User {
-  id: number
-  name: string
   email: string
-  role: Role
-  department_id: number
-  manager_id: number | null
+  name: string | null
+  department_id: string | null
+  manager_email: string | null
+  roles: Role[]
 }
 
 export interface CostUpload {
   id: number
-  vendor_id: number
+  vendor: string
   cost_month: string
   version: number
   status: 'success' | 'failed'
   file_name?: string
-  uploaded_by?: { id: number; name: string }
+  uploaded_by?: { email: string; name: string }
   uploaded_at?: string
   record_count?: number
+  reason?: string
   blob_path?: string
 }
 
@@ -48,25 +49,25 @@ export interface MyUsageBreakdownEntry {
 }
 
 export interface MyUsage {
-  user_id: number
+  user_email: string
   total_usd: number
   breakdown: MyUsageBreakdownEntry[]
 }
 
 export interface TeamUsageEntry {
-  user_id: number
+  user_email: string
   user_name: string
   amount_usd: number
 }
 
 export interface TeamUsage {
-  manager_id: number
+  manager_email: string
   total_usd: number
   by_user: TeamUsageEntry[]
 }
 
 export interface DepartmentUsage {
-  department_id: number
+  department_id: string
   department_name: string
   total_usd: number
   by_user: TeamUsageEntry[]

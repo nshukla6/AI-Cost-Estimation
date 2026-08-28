@@ -57,7 +57,7 @@ export function Team() {
           <DataTable
             columns={columns}
             data={reportees}
-            rowKey={(row) => row.user_id}
+            rowKey={(row) => row.user_email}
             isLoading={teamUsageQuery.isLoading}
             emptyMessage="You have no direct reports."
           />

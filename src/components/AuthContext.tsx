@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import type { ReactNode } from 'react'
 
 import { appConfig } from '@/config/app.config'
-import { roleHasPermission, type Permission } from '@/config/roles.config'
+import type { Permission } from '@/config/roles.config'
 import { allocationApi } from '@/lib/api/allocation.api'
 import { authApi } from '@/lib/api/auth.api'
 import type { AuthUser } from '@/types/domain'
@@ -17,7 +17,7 @@ interface AuthContextValue {
   loginWithSso: () => void
   logout: () => void
   hasPermission: (permission: Permission) => boolean
-  /** True when other users have this account set as manager_id. */
+  /** True when other users have this account set as manager_email. */
   managesReports: boolean
 }
 
@@ -111,10 +111,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setManagesReports(false)
   }, [])
 
-  const hasPermission = useCallback(
-    (permission: Permission) => (currentUser ? roleHasPermission(currentUser.role, permission) : false),
-    [currentUser],
-  )
+  // Permissions are resolved server-side (roles -> role_permissions ->
+  // permissions, unioned across every role the user holds) and returned as
+  // a flat array on login — this is just a membership check against it.
+  const hasPermission = useCallback((permission: Permission) => currentUser?.permissions.includes(permission) ?? false, [currentUser])
 
   const value = useMemo<AuthContextValue>(
     () => ({

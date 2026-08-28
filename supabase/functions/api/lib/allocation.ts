@@ -9,7 +9,7 @@ interface RangeFilter {
   to?: string
 }
 
-type CostRecordRow = { user_id: number; vendor_id: number; cost_month: string; amount_usd: number }
+type CostRecordRow = { user_email: string; vendor: string; cost_month: string; amount_usd: number }
 
 function round2(amount: number): number {
   return Math.round(amount * 100) / 100
@@ -18,81 +18,81 @@ function round2(amount: number): number {
 async function loadReferenceData() {
   const supabase = getServiceClient()
   const [{ data: vendors }, { data: departments }, { data: users }] = await Promise.all([
-    supabase.from('vendors').select('id, name'),
-    supabase.from('departments').select('id, name'),
-    supabase.from('users').select('id, name, department_id, manager_id'),
+    supabase.from('vendors').select('code, name'),
+    supabase.from('departments').select('department_id, department_name'),
+    supabase.from('users').select('email, name, department_id, manager_email'),
   ])
   return { vendors: vendors ?? [], departments: departments ?? [], users: users ?? [] }
 }
 
-async function activeRecords(filter: RangeFilter, userIdFilter?: number[]): Promise<CostRecordRow[]> {
-  if (userIdFilter && userIdFilter.length === 0) return []
+async function activeRecords(filter: RangeFilter, userEmailFilter?: string[]): Promise<CostRecordRow[]> {
+  if (userEmailFilter && userEmailFilter.length === 0) return []
 
   const supabase = getServiceClient()
-  let query = supabase.from('cost_records').select('user_id, vendor_id, cost_month, amount_usd').eq('is_deleted', false)
+  let query = supabase.from('cost_records').select('user_email, vendor, cost_month, amount_usd').eq('is_deleted', false)
   if (filter.from) query = query.gte('cost_month', filter.from)
   if (filter.to) query = query.lte('cost_month', filter.to)
-  if (userIdFilter) query = query.in('user_id', userIdFilter)
+  if (userEmailFilter) query = query.in('user_email', userEmailFilter)
 
   const { data, error } = await query
   if (error) throw error
   return data ?? []
 }
 
-function vendorBreakdown(vendors: { id: number; name: string }[], records: CostRecordRow[]) {
-  const byVendor = new Map<number, number>()
-  for (const record of records) byVendor.set(record.vendor_id, (byVendor.get(record.vendor_id) ?? 0) + record.amount_usd)
+function vendorBreakdown(vendors: { code: string; name: string }[], records: CostRecordRow[]) {
+  const byVendor = new Map<string, number>()
+  for (const record of records) byVendor.set(record.vendor, (byVendor.get(record.vendor) ?? 0) + record.amount_usd)
   return Array.from(byVendor.entries())
-    .map(([vendorId, amount]) => ({ key: vendors.find((v) => v.id === vendorId)?.name ?? `Vendor #${vendorId}`, amount_usd: round2(amount) }))
+    .map(([vendorCode, amount]) => ({ key: vendors.find((v) => v.code === vendorCode)?.name ?? vendorCode, amount_usd: round2(amount) }))
     .sort((a, b) => b.amount_usd - a.amount_usd)
 }
 
-export async function computeMyUsage(userId: number, filter: RangeFilter) {
+export async function computeMyUsage(userEmail: string, filter: RangeFilter) {
   const { vendors } = await loadReferenceData()
-  const records = await activeRecords(filter, [userId])
+  const records = await activeRecords(filter, [userEmail])
 
   const breakdown = records.map((r) => ({
-    vendor: vendors.find((v) => v.id === r.vendor_id)?.name ?? `Vendor #${r.vendor_id}`,
+    vendor: vendors.find((v) => v.code === r.vendor)?.name ?? r.vendor,
     cost_month: r.cost_month,
     amount_usd: r.amount_usd,
   }))
 
-  return { user_id: userId, total_usd: round2(records.reduce((sum, r) => sum + r.amount_usd, 0)), breakdown }
+  return { user_email: userEmail, total_usd: round2(records.reduce((sum, r) => sum + r.amount_usd, 0)), breakdown }
 }
 
-export async function computeTeamUsage(managerId: number, filter: RangeFilter) {
+export async function computeTeamUsage(managerEmail: string, filter: RangeFilter) {
   const { users } = await loadReferenceData()
-  const reportIds = users.filter((u) => u.manager_id === managerId).map((u) => u.id)
-  const records = await activeRecords(filter, reportIds)
+  const reportEmails = users.filter((u) => u.manager_email === managerEmail).map((u) => u.email)
+  const records = await activeRecords(filter, reportEmails)
 
-  const byUser = new Map<number, number>()
-  for (const r of records) byUser.set(r.user_id, (byUser.get(r.user_id) ?? 0) + r.amount_usd)
-  const by_user = Array.from(byUser.entries()).map(([userId, amount]) => ({
-    user_id: userId,
-    user_name: users.find((u) => u.id === userId)?.name ?? `User #${userId}`,
+  const byUser = new Map<string, number>()
+  for (const r of records) byUser.set(r.user_email, (byUser.get(r.user_email) ?? 0) + r.amount_usd)
+  const by_user = Array.from(byUser.entries()).map(([userEmail, amount]) => ({
+    user_email: userEmail,
+    user_name: users.find((u) => u.email === userEmail)?.name ?? userEmail,
     amount_usd: round2(amount),
   }))
 
-  return { manager_id: managerId, total_usd: round2(by_user.reduce((sum, e) => sum + e.amount_usd, 0)), by_user }
+  return { manager_email: managerEmail, total_usd: round2(by_user.reduce((sum, e) => sum + e.amount_usd, 0)), by_user }
 }
 
-export async function computeDepartmentUsage(departmentId: number, filter: RangeFilter) {
+export async function computeDepartmentUsage(departmentId: string, filter: RangeFilter) {
   const { vendors, departments, users } = await loadReferenceData()
-  const department = departments.find((d) => d.id === departmentId)
-  const memberIds = users.filter((u) => u.department_id === departmentId).map((u) => u.id)
-  const records = await activeRecords(filter, memberIds)
+  const department = departments.find((d) => d.department_id === departmentId)
+  const memberEmails = users.filter((u) => u.department_id === departmentId).map((u) => u.email)
+  const records = await activeRecords(filter, memberEmails)
 
-  const byUser = new Map<number, number>()
-  for (const r of records) byUser.set(r.user_id, (byUser.get(r.user_id) ?? 0) + r.amount_usd)
-  const by_user = Array.from(byUser.entries()).map(([userId, amount]) => ({
-    user_id: userId,
-    user_name: users.find((u) => u.id === userId)?.name ?? `User #${userId}`,
+  const byUser = new Map<string, number>()
+  for (const r of records) byUser.set(r.user_email, (byUser.get(r.user_email) ?? 0) + r.amount_usd)
+  const by_user = Array.from(byUser.entries()).map(([userEmail, amount]) => ({
+    user_email: userEmail,
+    user_name: users.find((u) => u.email === userEmail)?.name ?? userEmail,
     amount_usd: round2(amount),
   }))
 
   return {
     department_id: departmentId,
-    department_name: department?.name ?? `Department #${departmentId}`,
+    department_name: department?.department_name ?? departmentId,
     total_usd: round2(by_user.reduce((sum, e) => sum + e.amount_usd, 0)),
     by_user,
     by_vendor: vendorBreakdown(vendors, records),
@@ -111,15 +111,15 @@ export async function computeOrgUsage(filter: RangeFilter & { groupBy: OrgUsageG
   for (const record of records) {
     let key: string
     if (filter.groupBy === 'vendor') {
-      key = vendors.find((v) => v.id === record.vendor_id)?.name ?? `Vendor #${record.vendor_id}`
+      key = vendors.find((v) => v.code === record.vendor)?.name ?? record.vendor
     } else if (filter.groupBy === 'user') {
-      key = users.find((u) => u.id === record.user_id)?.name ?? `User #${record.user_id}`
+      key = users.find((u) => u.email === record.user_email)?.name ?? record.user_email
     } else if (filter.groupBy === 'org') {
       key = 'Organization'
     } else {
-      const user = users.find((u) => u.id === record.user_id)
-      const department = user ? departments.find((d) => d.id === user.department_id) : undefined
-      key = department?.name ?? 'Unknown'
+      const user = users.find((u) => u.email === record.user_email)
+      const department = user ? departments.find((d) => d.department_id === user.department_id) : undefined
+      key = department?.department_name ?? 'Unknown'
     }
     grouped.set(key, (grouped.get(key) ?? 0) + record.amount_usd)
 

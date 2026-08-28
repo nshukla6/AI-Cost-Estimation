@@ -1,6 +1,6 @@
 import { Hono } from 'npm:hono@4'
 
-import { authenticate, requireRole } from '../lib/auth-middleware.ts'
+import { authenticate, requirePermission } from '../lib/auth-middleware.ts'
 import { ApiError } from '../lib/errors.ts'
 import { getServiceClient } from '../lib/supabase.ts'
 
@@ -11,7 +11,7 @@ vendorRoutes.get('/vendors', async (c) => {
 
   const supabase = getServiceClient()
   const isActiveParam = c.req.query('is_active')
-  let query = supabase.from('vendors').select('id, name, is_active').order('id')
+  let query = supabase.from('vendors').select('code, name, is_active').order('code')
   if (isActiveParam !== undefined) query = query.eq('is_active', isActiveParam === 'true')
 
   const { data, error } = await query
@@ -19,17 +19,17 @@ vendorRoutes.get('/vendors', async (c) => {
   return c.json(data)
 })
 
-vendorRoutes.put('/vendors/:id', async (c) => {
+vendorRoutes.put('/vendors/:code', async (c) => {
   const user = await authenticate(c)
-  requireRole(user, ['ai_tool_admin'], 'Only AI Tool Admins can manage vendors')
+  requirePermission(user, 'vendors.manage', 'Only AI Tool Admins can manage vendors')
 
   const body = await c.req.json<{ is_active: boolean }>()
   const supabase = getServiceClient()
   const { data, error } = await supabase
     .from('vendors')
     .update({ is_active: body.is_active })
-    .eq('id', Number(c.req.param('id')))
-    .select('id, name, is_active')
+    .eq('code', c.req.param('code'))
+    .select('code, name, is_active')
     .maybeSingle()
 
   if (error) throw error

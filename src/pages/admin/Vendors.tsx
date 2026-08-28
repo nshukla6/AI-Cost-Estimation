@@ -19,7 +19,7 @@ const vendorColumns: DataTableColumn<Vendor>[] = [
 function VendorActiveToggle({ vendor }: { vendor: Vendor }) {
   const queryClient = useQueryClient()
   const mutation = useMutation({
-    mutationFn: (isActive: boolean) => vendorsApi.setActive(vendor.id, isActive),
+    mutationFn: (isActive: boolean) => vendorsApi.setActive(vendor.code, isActive),
     onSuccess: () => {
       toast.success(`${vendor.name} ${vendor.is_active ? 'disabled' : 'enabled'}`)
       queryClient.invalidateQueries({ queryKey: ['vendors'] })
@@ -51,7 +51,7 @@ export function VendorsAdmin() {
           <CardTitle>Vendors</CardTitle>
         </CardHeader>
         <CardContent>
-          <DataTable columns={vendorColumns} data={vendorsQuery.data ?? []} rowKey={(row) => row.id} isLoading={vendorsQuery.isLoading} />
+          <DataTable columns={vendorColumns} data={vendorsQuery.data ?? []} rowKey={(row) => row.code} isLoading={vendorsQuery.isLoading} />
         </CardContent>
       </Card>
     </div>

@@ -3,9 +3,9 @@ import { delay, http, HttpResponse } from 'msw'
 import { appConfig } from '@/config/app.config'
 import type { Role } from '@/config/roles.config'
 import { computeDepartmentUsage, computeMyUsage, computeOrgUsage, computeTeamUsage, generateOrgReportCsv } from '@/mocks/allocation'
-import { loadDb, saveDb, type MockCostUpload, type MockUser } from '@/mocks/db'
+import { loadDb, MOCK_ROLE_PERMISSIONS, saveDb, type MockCostUpload, type MockUser } from '@/mocks/db'
 import { sha256Hex } from '@/mocks/hash'
-import { createToken, getUserIdFromAuthHeader, TOKEN_TTL_SECONDS } from '@/mocks/token'
+import { createToken, getUserEmailFromAuthHeader, TOKEN_TTL_SECONDS } from '@/mocks/token'
 import type { OrgUsageGroupBy } from '@/types/domain'
 
 function url(path: string): string {
@@ -16,6 +16,10 @@ function errorResponse(status: number, error: string, code?: string) {
   return HttpResponse.json({ error, code }, { status })
 }
 
+function permissionsFor(roles: Role[]): string[] {
+  return Array.from(new Set(roles.flatMap((role) => MOCK_ROLE_PERMISSIONS[role])))
+}
+
 function publicUser(user: MockUser) {
   const { password: _password, ...rest } = user
   return rest
@@ -23,22 +27,23 @@ function publicUser(user: MockUser) {
 
 interface AuthContext {
   user: MockUser
+  permissions: string[]
 }
 
-/** Mirrors "every endpoint except login requires Authorization: Bearer <jwt>". */
+/** Mirrors "every endpoint except login requires Authorization: Bearer <token>". */
 function authenticate(request: Request): AuthContext | Response {
   const db = loadDb()
-  const userId = getUserIdFromAuthHeader(request.headers.get('Authorization'))
-  const user = userId !== null ? db.users.find((u) => u.id === userId) : undefined
+  const email = getUserEmailFromAuthHeader(request.headers.get('Authorization'))
+  const user = email !== null ? db.users.find((u) => u.email === email) : undefined
 
   if (!user) {
     return errorResponse(401, 'Missing or expired token', 'AUTH_REQUIRED')
   }
-  return { user }
+  return { user, permissions: permissionsFor(user.roles) }
 }
 
-function requireRole(auth: AuthContext, roles: Role[], message = 'You do not have permission to perform this action'): Response | null {
-  if (!roles.includes(auth.user.role)) {
+function requirePermission(auth: AuthContext, permission: string, message = 'You do not have permission to perform this action'): Response | null {
+  if (!auth.permissions.includes(permission)) {
     return errorResponse(403, message, 'FORBIDDEN')
   }
   return null
@@ -64,7 +69,7 @@ export const handlers = [
     return HttpResponse.json({
       access_token: createToken(user),
       expires_in: TOKEN_TTL_SECONDS,
-      user: publicUser(user),
+      user: { ...publicUser(user), permissions: permissionsFor(user.roles) },
     })
   }),
 
@@ -80,15 +85,15 @@ export const handlers = [
     return HttpResponse.json(vendors)
   }),
 
-  http.put(url('/vendors/:id'), async ({ request, params }) => {
+  http.put(url('/vendors/:code'), async ({ request, params }) => {
     await delay(250)
     const auth = authenticate(request)
     if (isAuthError(auth)) return auth
-    const forbidden = requireRole(auth, ['ai_tool_admin'], 'Only AI Tool Admins can manage vendors')
+    const forbidden = requirePermission(auth, 'vendors.manage', 'Only AI Tool Admins can manage vendors')
     if (forbidden) return forbidden
 
     const db = loadDb()
-    const vendor = db.vendors.find((v) => v.id === Number(params.id))
+    const vendor = db.vendors.find((v) => v.code === params.code)
     if (!vendor) return errorResponse(404, 'Vendor not found', 'NOT_FOUND')
 
     const body = (await request.json()) as { is_active: boolean }
@@ -102,23 +107,26 @@ export const handlers = [
     await delay(500)
     const auth = authenticate(request)
     if (isAuthError(auth)) return auth
-    const forbidden = requireRole(auth, ['ai_tool_admin'], 'Only AI Tool Admins can upload cost sheets')
+    const forbidden = requirePermission(auth, 'vendors.upload_cost_sheet', 'Only AI Tool Admins can upload cost sheets')
     if (forbidden) return forbidden
 
     const form = await request.formData()
-    const vendorId = Number(form.get('vendor_id'))
-    const costMonth = String(form.get('cost_month'))
+    const vendorCode = String(form.get('vendor_id') ?? form.get('vendor') ?? '')
+    const costMonthRaw = String(form.get('cost_month'))
+    const costMonth = /^\d{4}-\d{2}/.test(costMonthRaw) ? `${costMonthRaw.slice(0, 7)}-01` : costMonthRaw
     const force = form.get('force') === 'true'
+    const reasonRaw = form.get('reason')
+    const reason = typeof reasonRaw === 'string' && reasonRaw.trim() ? reasonRaw.trim() : undefined
     const file = form.get('file')
 
-    if (!vendorId || !costMonth || !(file instanceof File)) {
-      return errorResponse(400, 'vendor_id, cost_month and file are required', 'BAD_REQUEST')
+    if (!vendorCode || !costMonth || !(file instanceof File)) {
+      return errorResponse(400, 'vendor, cost_month and file are required', 'BAD_REQUEST')
     }
 
     const db = loadDb()
     const fileHash = await sha256Hex(file)
 
-    const exactDuplicate = db.costUploads.find((u) => u.vendor_id === vendorId && u.file_hash === fileHash)
+    const exactDuplicate = db.costUploads.find((u) => u.vendor === vendorCode && u.file_hash === fileHash)
     if (exactDuplicate && !force) {
       return errorResponse(409, 'This exact file was already uploaded', 'DUPLICATE_FILE')
     }
@@ -144,40 +152,48 @@ export const handlers = [
       parsedRows.push({ email, amount })
     }
 
-    const priorUploadsForMonth = db.costUploads.filter((u) => u.vendor_id === vendorId && u.cost_month === costMonth)
+    const priorUploadsForMonth = db.costUploads.filter((u) => u.vendor === vendorCode && u.cost_month === costMonth)
     const nextVersion = priorUploadsForMonth.length > 0 ? Math.max(...priorUploadsForMonth.map((u) => u.version)) + 1 : 1
+
+    // 409, not 422: a conflict with the existing upload, same category as
+    // DUPLICATE_FILE — the frontend treats both as "confirm and resubmit."
+    if (nextVersion > 1 && !reason) {
+      return errorResponse(409, 'A reason is required when re-uploading a cost sheet for a vendor/month that already has an upload', 'REASON_REQUIRED')
+    }
 
     // Soft-delete the prior version's records for this vendor+month.
     for (const record of db.costRecords) {
-      if (record.vendor_id === vendorId && record.cost_month === costMonth && !record.deleted) {
+      if (record.vendor === vendorCode && record.cost_month === costMonth && !record.deleted) {
         record.deleted = true
       }
     }
 
     const upload: MockCostUpload = {
       id: db.nextId.costUploads++,
-      vendor_id: vendorId,
+      vendor: vendorCode,
       cost_month: costMonth,
       version: nextVersion,
       status: 'success',
       file_name: file.name,
       file_hash: fileHash,
-      uploaded_by: { id: auth.user.id, name: auth.user.name },
+      uploaded_by: { email: auth.user.email, name: auth.user.name },
       uploaded_at: new Date().toISOString(),
       record_count: parsedRows.length,
+      reason,
     }
     db.costUploads.push(upload)
 
+    const knownEmails = new Map(db.users.map((u) => [u.email.toLowerCase(), u.email]))
     let matchedCount = 0
     for (const row of parsedRows) {
-      const matchedUser = db.users.find((u) => u.email.toLowerCase() === row.email.toLowerCase())
-      if (!matchedUser) continue
+      const canonicalEmail = knownEmails.get(row.email.toLowerCase())
+      if (!canonicalEmail) continue
       matchedCount++
       db.costRecords.push({
         id: db.nextId.costRecords++,
         upload_id: upload.id,
-        user_id: matchedUser.id,
-        vendor_id: vendorId,
+        user_email: canonicalEmail,
+        vendor: vendorCode,
         cost_month: costMonth,
         amount_usd: row.amount,
         deleted: false,
@@ -188,7 +204,7 @@ export const handlers = [
     return HttpResponse.json(
       {
         id: upload.id,
-        vendor_id: upload.vendor_id,
+        vendor: upload.vendor,
         cost_month: upload.cost_month,
         version: upload.version,
         status: upload.status,
@@ -203,16 +219,16 @@ export const handlers = [
     await delay(200)
     const auth = authenticate(request)
     if (isAuthError(auth)) return auth
-    const forbidden = requireRole(auth, ['ai_tool_admin', 'ai_cost_manager'])
+    const forbidden = requirePermission(auth, 'vendors.view_upload_history')
     if (forbidden) return forbidden
 
     const db = loadDb()
     const params = new URL(request.url).searchParams
-    const vendorId = params.get('vendor_id')
+    const vendorCode = params.get('vendor_id') ?? params.get('vendor')
     const costMonth = params.get('cost_month')
 
     let uploads = db.costUploads
-    if (vendorId) uploads = uploads.filter((u) => u.vendor_id === Number(vendorId))
+    if (vendorCode) uploads = uploads.filter((u) => u.vendor === vendorCode)
     if (costMonth) uploads = uploads.filter((u) => u.cost_month === costMonth)
 
     return HttpResponse.json([...uploads].sort((a, b) => b.uploaded_at.localeCompare(a.uploaded_at)))
@@ -222,7 +238,7 @@ export const handlers = [
     await delay(200)
     const auth = authenticate(request)
     if (isAuthError(auth)) return auth
-    const forbidden = requireRole(auth, ['ai_tool_admin', 'ai_cost_manager'])
+    const forbidden = requirePermission(auth, 'vendors.view_upload_history')
     if (forbidden) return forbidden
 
     const db = loadDb()
@@ -236,26 +252,26 @@ export const handlers = [
     await delay(250)
     const auth = authenticate(request)
     if (isAuthError(auth)) return auth
-    const forbidden = requireRole(auth, ['ai_tool_admin', 'ai_cost_manager'])
+    const forbidden = requirePermission(auth, 'vendors.view_upload_history')
     if (forbidden) return forbidden
 
     const db = loadDb()
     const uploadId = Number(params.id)
     const compareToId = Number(new URL(request.url).searchParams.get('compare_to'))
 
-    const afterByUser = new Map<number, number>()
-    const beforeByUser = new Map<number, number>()
+    const afterByUser = new Map<string, number>()
+    const beforeByUser = new Map<string, number>()
     for (const record of db.costRecords) {
-      if (record.upload_id === uploadId) afterByUser.set(record.user_id, (afterByUser.get(record.user_id) ?? 0) + record.amount_usd)
-      if (record.upload_id === compareToId) beforeByUser.set(record.user_id, (beforeByUser.get(record.user_id) ?? 0) + record.amount_usd)
+      if (record.upload_id === uploadId) afterByUser.set(record.user_email, (afterByUser.get(record.user_email) ?? 0) + record.amount_usd)
+      if (record.upload_id === compareToId) beforeByUser.set(record.user_email, (beforeByUser.get(record.user_email) ?? 0) + record.amount_usd)
     }
 
-    const userIds = new Set([...afterByUser.keys(), ...beforeByUser.keys()])
-    const diff = Array.from(userIds).map((userId) => ({
-      user_id: userId,
-      user_name: db.users.find((u) => u.id === userId)?.name ?? `User #${userId}`,
-      before_usd: Math.round((beforeByUser.get(userId) ?? 0) * 100) / 100,
-      after_usd: Math.round((afterByUser.get(userId) ?? 0) * 100) / 100,
+    const userEmails = new Set([...afterByUser.keys(), ...beforeByUser.keys()])
+    const diff = Array.from(userEmails).map((userEmail) => ({
+      user_email: userEmail,
+      user_name: db.users.find((u) => u.email === userEmail)?.name ?? userEmail,
+      before_usd: Math.round((beforeByUser.get(userEmail) ?? 0) * 100) / 100,
+      after_usd: Math.round((afterByUser.get(userEmail) ?? 0) * 100) / 100,
     }))
 
     return HttpResponse.json(diff)
@@ -266,42 +282,77 @@ export const handlers = [
     await delay(200)
     const auth = authenticate(request)
     if (isAuthError(auth)) return auth
-    const forbidden = requireRole(auth, ['ai_tool_admin', 'ai_cost_manager'])
+    const forbidden = requirePermission(auth, 'users.view')
     if (forbidden) return forbidden
 
     const db = loadDb()
     const params = new URL(request.url).searchParams
     const departmentId = params.get('department_id')
-    const role = params.get('role')
-    const managerId = params.get('manager_id')
+    const role = params.get('role') as Role | null
+    const managerEmail = params.get('manager_email')
 
     let users = db.users
-    if (departmentId) users = users.filter((u) => u.department_id === Number(departmentId))
-    if (role) users = users.filter((u) => u.role === role)
-    if (managerId) users = users.filter((u) => u.manager_id === Number(managerId))
+    if (departmentId) users = users.filter((u) => u.department_id === departmentId)
+    if (role) users = users.filter((u) => u.roles.includes(role))
+    if (managerEmail) users = users.filter((u) => u.manager_email === managerEmail)
 
     return HttpResponse.json(users.map(publicUser))
   }),
 
-  http.put(url('/users/:id/role'), async ({ request, params }) => {
+  // Available roles, for the role-assignment UI's picker.
+  http.get(url('/roles'), async ({ request }) => {
+    await delay(150)
+    const auth = authenticate(request)
+    if (isAuthError(auth)) return auth
+    const forbidden = requirePermission(auth, 'users.manage_roles')
+    if (forbidden) return forbidden
+
+    const db = loadDb()
+    return HttpResponse.json(db.roles)
+  }),
+
+  http.post(url('/users/:email/roles'), async ({ request, params }) => {
     await delay(250)
     const auth = authenticate(request)
     if (isAuthError(auth)) return auth
-    const forbidden = requireRole(auth, ['ai_tool_admin'], 'Only AI Tool Admins can change user roles')
+    const forbidden = requirePermission(auth, 'users.manage_roles', 'Only AI Tool Admins can manage user roles')
     if (forbidden) return forbidden
 
-    const body = (await request.json()) as { role: Role }
-    if (body.role !== 'viewer') {
-      return errorResponse(403, 'AI Tool Admins can only set a user’s role to viewer', 'FORBIDDEN')
-    }
-
     const db = loadDb()
-    const user = db.users.find((u) => u.id === Number(params.id))
+    const targetEmail = decodeURIComponent(String(params.email))
+    const user = db.users.find((u) => u.email === targetEmail)
     if (!user) return errorResponse(404, 'User not found', 'NOT_FOUND')
 
-    user.role = body.role
+    const body = (await request.json()) as { role_code?: Role }
+    if (!body.role_code) return errorResponse(400, 'role_code is required', 'BAD_REQUEST')
+    if (!db.roles.some((r) => r.role_code === body.role_code)) return errorResponse(404, 'Role not found', 'NOT_FOUND')
+    if (user.roles.includes(body.role_code)) return errorResponse(409, 'User already has this role', 'ROLE_ALREADY_ASSIGNED')
+
+    user.roles.push(body.role_code)
     saveDb(db)
-    return HttpResponse.json(publicUser(user))
+    return HttpResponse.json({ email: user.email, roles: user.roles }, { status: 201 })
+  }),
+
+  http.delete(url('/users/:email/roles/:roleCode'), async ({ request, params }) => {
+    await delay(250)
+    const auth = authenticate(request)
+    if (isAuthError(auth)) return auth
+    const forbidden = requirePermission(auth, 'users.manage_roles', 'Only AI Tool Admins can manage user roles')
+    if (forbidden) return forbidden
+
+    const db = loadDb()
+    const targetEmail = decodeURIComponent(String(params.email))
+    const user = db.users.find((u) => u.email === targetEmail)
+    if (!user) return errorResponse(404, 'User not found', 'NOT_FOUND')
+
+    const roleCode = params.roleCode as Role
+    if (user.roles.length === 1 && user.roles[0] === roleCode) {
+      return errorResponse(409, "Cannot remove a user's last role", 'LAST_ROLE')
+    }
+
+    user.roles = user.roles.filter((r) => r !== roleCode)
+    saveDb(db)
+    return HttpResponse.json({ email: user.email, roles: user.roles })
   }),
 
   // -- Allocation -----------------------------------------------------------
@@ -312,7 +363,7 @@ export const handlers = [
 
     const db = loadDb()
     const params = new URL(request.url).searchParams
-    return HttpResponse.json(computeMyUsage(db, auth.user.id, { from: params.get('from') ?? undefined, to: params.get('to') ?? undefined }))
+    return HttpResponse.json(computeMyUsage(db, auth.user.email, { from: params.get('from') ?? undefined, to: params.get('to') ?? undefined }))
   }),
 
   http.get(url('/allocation/team'), async ({ request }) => {
@@ -322,23 +373,20 @@ export const handlers = [
 
     const db = loadDb()
     const params = new URL(request.url).searchParams
-    return HttpResponse.json(computeTeamUsage(db, auth.user.id, { from: params.get('from') ?? undefined, to: params.get('to') ?? undefined }))
+    return HttpResponse.json(computeTeamUsage(db, auth.user.email, { from: params.get('from') ?? undefined, to: params.get('to') ?? undefined }))
   }),
 
   http.get(url('/allocation/department/:departmentId'), async ({ request, params }) => {
     await delay(300)
     const auth = authenticate(request)
     if (isAuthError(auth)) return auth
-    // The API design doc scopes this to ai_cost_manager only, but the build
-    // prompt asks for ai_tool_admin to "see all the screens" (just not
-    // download) — so both roles are allowed through here.
-    const forbidden = requireRole(auth, ['ai_cost_manager', 'ai_tool_admin'])
+    const forbidden = requirePermission(auth, 'usage.view_department')
     if (forbidden) return forbidden
 
     const db = loadDb()
     const searchParams = new URL(request.url).searchParams
     return HttpResponse.json(
-      computeDepartmentUsage(db, Number(params.departmentId), { from: searchParams.get('from') ?? undefined, to: searchParams.get('to') ?? undefined }),
+      computeDepartmentUsage(db, String(params.departmentId), { from: searchParams.get('from') ?? undefined, to: searchParams.get('to') ?? undefined }),
     )
   }),
 
@@ -346,7 +394,7 @@ export const handlers = [
     await delay(300)
     const auth = authenticate(request)
     if (isAuthError(auth)) return auth
-    const forbidden = requireRole(auth, ['ai_cost_manager', 'ai_tool_admin'])
+    const forbidden = requirePermission(auth, 'usage.view_org')
     if (forbidden) return forbidden
 
     const db = loadDb()
@@ -360,7 +408,7 @@ export const handlers = [
     await delay(400)
     const auth = authenticate(request)
     if (isAuthError(auth)) return auth
-    const forbidden = requireRole(auth, ['ai_cost_manager'], 'Only AI Cost Managers can download reports')
+    const forbidden = requirePermission(auth, 'reports.download', 'Only AI Cost Managers can download reports')
     if (forbidden) return forbidden
 
     const db = loadDb()

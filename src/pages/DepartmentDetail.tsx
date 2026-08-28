@@ -27,7 +27,7 @@ const vendorColumns: DataTableColumn<OrgUsageBreakdownEntry>[] = [
 
 export function DepartmentDetail() {
   const { departmentId } = useParams<{ departmentId: string }>()
-  const id = Number(departmentId)
+  const id = departmentId ?? ''
   const knownDepartment = DEPARTMENTS.find((department) => department.id === id)
 
   const [granularity, setGranularity] = useState<PeriodGranularity>('month')
@@ -64,7 +64,7 @@ export function DepartmentDetail() {
             <DataTable
               columns={userColumns}
               data={departmentQuery.data?.by_user ?? []}
-              rowKey={(row) => row.user_id}
+              rowKey={(row) => row.user_email}
               isLoading={departmentQuery.isLoading}
             />
           </CardContent>

@@ -26,22 +26,25 @@ export function Header() {
   const { currentUser, logout } = useAuth()
   if (!currentUser) return null
 
+  const displayName = currentUser.name ?? currentUser.email
+
   return (
     <header className="flex h-14 shrink-0 items-center justify-end border-b border-border px-6">
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button variant="ghost" className="h-auto gap-2 px-2 py-1.5">
             <Avatar className="size-8">
-              <AvatarFallback>{initialsFor(currentUser.name)}</AvatarFallback>
+              <AvatarFallback>{initialsFor(displayName)}</AvatarFallback>
             </Avatar>
             <div className="text-left text-sm leading-tight">
-              <p className="font-medium">{currentUser.name}</p>
-              <p className="text-xs text-muted-foreground">{ROLE_LABELS[currentUser.role]}</p>
+              <p className="font-medium">{displayName}</p>
+              {/* A user can hold more than one role — join every label rather than assuming one. */}
+              <p className="text-xs text-muted-foreground">{currentUser.roles.map((role) => ROLE_LABELS[role]).join(', ')}</p>
             </div>
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
-          <DropdownMenuLabel>{currentUser.name}</DropdownMenuLabel>
+          <DropdownMenuLabel>{displayName}</DropdownMenuLabel>
           <DropdownMenuSeparator />
           <DropdownMenuItem onClick={logout}>
             <LogOut className="size-4" />

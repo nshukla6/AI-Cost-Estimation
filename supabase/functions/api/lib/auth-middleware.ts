@@ -1,16 +1,17 @@
 import type { Context } from 'npm:hono@4'
 
+import { resolveAccess } from './access.ts'
 import { verifyToken } from './crypto.ts'
 import { ApiError } from './errors.ts'
 import { getServiceClient } from './supabase.ts'
 
 export interface AuthedUser {
-  id: number
-  name: string
   email: string
-  role: string
-  department_id: number
-  manager_id: number | null
+  name: string | null
+  department_id: string | null
+  manager_email: string | null
+  roles: string[]
+  permissions: string[]
 }
 
 /** Mirrors "every endpoint except login requires Authorization: Bearer <token>". */
@@ -27,14 +28,16 @@ export async function authenticate(c: Context): Promise<AuthedUser> {
   const supabase = getServiceClient()
   const { data: user, error } = await supabase
     .from('users')
-    .select('id, name, email, role, department_id, manager_id')
-    .eq('id', payload.sub)
+    .select('email, name, department_id, manager_email')
+    .eq('email', payload.sub)
     .maybeSingle()
 
   if (error || !user) throw new ApiError(401, 'Missing or expired token', 'AUTH_REQUIRED')
-  return user as AuthedUser
+
+  const { roles, permissions } = await resolveAccess(user.email)
+  return { ...user, roles, permissions }
 }
 
-export function requireRole(user: AuthedUser, roles: string[], message = 'You do not have permission to perform this action'): void {
-  if (!roles.includes(user.role)) throw new ApiError(403, message, 'FORBIDDEN')
+export function requirePermission(user: AuthedUser, permission: string, message = 'You do not have permission to perform this action'): void {
+  if (!user.permissions.includes(permission)) throw new ApiError(403, message, 'FORBIDDEN')
 }

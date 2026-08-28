@@ -18,7 +18,7 @@ import type { CostUpload, Vendor } from '@/types/domain'
 
 function uploadHistoryColumns(vendors: Vendor[]): DataTableColumn<CostUpload>[] {
   return [
-    { key: 'vendor_id', header: 'Vendor', render: (row) => vendors.find((vendor) => vendor.id === row.vendor_id)?.name ?? `#${row.vendor_id}` },
+    { key: 'vendor', header: 'Vendor', render: (row) => vendors.find((vendor) => vendor.code === row.vendor)?.name ?? row.vendor },
     { key: 'cost_month', header: 'Month', render: (row) => row.cost_month },
     { key: 'version', header: 'Version', render: (row) => `v${row.version}` },
     {
@@ -38,7 +38,7 @@ export function UploadsAdmin() {
   const historyQuery = useQuery({ queryKey: ['cost-uploads'], queryFn: () => costUploadsApi.getHistory() })
 
   const [isUploadOpen, setIsUploadOpen] = useState(false)
-  const [vendorId, setVendorId] = useState('')
+  const [vendorCode, setVendorCode] = useState('')
   const [costMonth, setCostMonth] = useState('')
   const [file, setFile] = useState<File | null>(null)
   // Only shown after the API rejects with 409 REASON_REQUIRED — this vendor/
@@ -49,7 +49,7 @@ export function UploadsAdmin() {
 
   const resetUploadForm = () => {
     setIsUploadOpen(false)
-    setVendorId('')
+    setVendorCode('')
     setCostMonth('')
     setFile(null)
     setNeedsReason(false)
@@ -57,7 +57,7 @@ export function UploadsAdmin() {
   }
 
   const uploadMutation = useMutation({
-    mutationFn: () => costUploadsApi.upload({ vendorId: Number(vendorId), costMonth, file: file!, reason: needsReason ? reason : undefined }),
+    mutationFn: () => costUploadsApi.upload({ vendor: vendorCode, costMonth, file: file!, reason: needsReason ? reason : undefined }),
     onSuccess: () => {
       toast.success('Cost sheet uploaded successfully')
       queryClient.invalidateQueries({ queryKey: ['cost-uploads'] })
@@ -74,7 +74,7 @@ export function UploadsAdmin() {
   })
 
   const handleUploadSubmit = () => {
-    if (!vendorId || !costMonth || !file) {
+    if (!vendorCode || !costMonth || !file) {
       toast.error('Please fill in all mandatory fields')
       return
     }
@@ -121,13 +121,13 @@ export function UploadsAdmin() {
         submitLabel={needsReason ? 'Replace Upload' : 'Upload'}
         submittingLabel="Uploading..."
         isSubmitting={uploadMutation.isPending}
-        submitDisabled={!vendorId || !costMonth || !file || (needsReason && !reason.trim())}
+        submitDisabled={!vendorCode || !costMonth || !file || (needsReason && !reason.trim())}
       >
         <FormField label="Vendor" required>
           <Select
-            value={vendorId}
+            value={vendorCode}
             onValueChange={(value) => {
-              setVendorId(value)
+              setVendorCode(value)
               setNeedsReason(false)
               setReason('')
             }}
@@ -137,7 +137,7 @@ export function UploadsAdmin() {
             </SelectTrigger>
             <SelectContent>
               {(vendorsQuery.data ?? []).map((vendor) => (
-                <SelectItem key={vendor.id} value={String(vendor.id)}>
+                <SelectItem key={vendor.code} value={vendor.code}>
                   {vendor.name}
                 </SelectItem>
               ))}

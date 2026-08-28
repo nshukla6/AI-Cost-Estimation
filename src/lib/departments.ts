@@ -1,16 +1,15 @@
 export interface DepartmentSummary {
-  id: number
+  id: string
   name: string
 }
 
-// Placeholder until a GET /departments endpoint exists — matches the mock
-// backend's seed data (src/mocks/db.ts) and the API design doc's example
-// (department_id 2 = "Engineering" — ids here are just kept self-consistent
-// with the mock).
+// Placeholder until a GET /departments endpoint exists — matches the
+// departments seeded in db/schema.sql (department_id is a real business
+// code now, e.g. 'ENG', not a numeric id).
 export const DEPARTMENTS: DepartmentSummary[] = [
-  { id: 1, name: 'Engineering' },
-  { id: 2, name: 'Sales' },
-  { id: 3, name: 'Marketing' },
-  { id: 4, name: 'IT' },
-  { id: 5, name: 'Research' },
+  { id: 'ENG', name: 'Engineering' },
+  { id: 'SALES', name: 'Sales' },
+  { id: 'MKT', name: 'Marketing' },
+  { id: 'IT', name: 'IT' },
+  { id: 'RESEARCH', name: 'Research' },
 ]

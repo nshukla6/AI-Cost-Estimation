@@ -23,11 +23,28 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined)
 
+// A stored user has to actually look like today's AuthUser shape before
+// it's trusted — a browser that last logged in before a backend/schema
+// change (e.g. the pre-roles-migration shape, which had no permissions/
+// roles arrays at all) would otherwise load a stale object that crashes
+// the first thing that reads .permissions/.roles, well before any API
+// call gets a chance to 401 and redirect to login.
+function isValidStoredUser(value: unknown): value is AuthUser {
+  if (!value || typeof value !== 'object') return false
+  const candidate = value as Partial<AuthUser>
+  return Array.isArray(candidate.permissions) && Array.isArray(candidate.roles)
+}
+
 function readStoredUser(): AuthUser | null {
   const raw = localStorage.getItem(appConfig.auth.userStorageKey)
   if (!raw) return null
   try {
-    return JSON.parse(raw) as AuthUser
+    const parsed = JSON.parse(raw)
+    if (!isValidStoredUser(parsed)) {
+      clearSession()
+      return null
+    }
+    return parsed
   } catch {
     return null
   }
@@ -114,7 +131,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Permissions are resolved server-side (roles -> role_permissions ->
   // permissions, unioned across every role the user holds) and returned as
   // a flat array on login — this is just a membership check against it.
-  const hasPermission = useCallback((permission: Permission) => currentUser?.permissions.includes(permission) ?? false, [currentUser])
+  const hasPermission = useCallback((permission: Permission) => currentUser?.permissions?.includes(permission) ?? false, [currentUser])
 
   const value = useMemo<AuthContextValue>(
     () => ({
